@@ -1,13 +1,13 @@
 # Image Resizer for Cordova #
-By: Protonet GmbH
+By: Protonet GmbH - DeltaPixel
 
-Authors: Joschka Schulz
+Authors: Joschka Schulz - Edit by Yurik94
 
 ## Adding the Plugin ##
 
 Use the Cordova CLI and type in the following command:
 
-`cordova plugin add https://github.com/protonet/cordova-plugin-image-resizer.git`
+`cordova plugin add https://github.com/yurik94/cordova-plugin-image-resizer.git`
 
 ## Sample Code
 
