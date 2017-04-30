@@ -5,7 +5,9 @@ import android.graphics.Bitmap.CompressFormat;
 import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.Environment;
+import android.util.Base64;
 import android.util.Log;
+
 import org.apache.cordova.CallbackContext;
 import org.apache.cordova.CordovaPlugin;
 import org.apache.cordova.PluginResult;
@@ -18,6 +20,9 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
+import java.net.URI;
+import java.net.URISyntaxException;
 
 public class ImageResizer extends CordovaPlugin {
     private static final int ARGUMENT_NUMBER = 1;
@@ -29,6 +34,10 @@ public class ImageResizer extends CordovaPlugin {
     private int quality;
     private int width;
     private int height;
+
+    public static final String FORMAT_JPG = "jpg";
+    public static final String FORMAT_PNG = "png";
+    public static final String DEFAULT_FORMAT = "jpg";
 
     public boolean execute(String action, JSONArray args, CallbackContext callbackContext) throws JSONException {
         try {
@@ -60,6 +69,11 @@ public class ImageResizer extends CordovaPlugin {
 
                 callbackContext.sendPluginResult(new PluginResult(PluginResult.Status.OK, scaledFile.toString()));
                 return true;
+            } else if (action.equals("size")) {
+                JSONObject params = args.getJSONObject(0);
+                GetImageSize imageSize = new GetImageSize(params, callbackContext);
+                cordova.getThreadPool().execute(imageSize);
+                return true;
             } else {
                 callbackContext.sendPluginResult(new PluginResult(PluginResult.Status.ERROR));
                 return false;
@@ -76,6 +90,7 @@ public class ImageResizer extends CordovaPlugin {
      *
      * @params uri the URI who points to the image
      **/
+
     private Bitmap loadScaledBitmapFromUri(String uriString, int width, int height) {
         try {
             BitmapFactory.Options options = new BitmapFactory.Options();
@@ -225,5 +240,88 @@ public class ImageResizer extends CordovaPlugin {
         // Create the cache directory if it doesn't exist
         cache.mkdirs();
         return cache.getAbsolutePath();
+    }
+
+
+    private class ImageTools {
+        protected JSONObject params;
+        protected CallbackContext callbackContext;
+        protected String format;
+        protected String imageData;
+        protected String imageDataType;
+
+        public ImageTools(JSONObject params, CallbackContext callbackContext) throws JSONException {
+            this.params = params;
+            this.callbackContext = callbackContext;
+            imageData = params.getString("data");
+            imageDataType = "urlImage";
+            if (params.has("imageDataType")) {
+                imageDataType = params.getString("imageDataType");
+            }
+            format = DEFAULT_FORMAT;
+            if (params.has("format")) {
+                format = params.getString("format");
+            }
+        }
+
+        protected Bitmap getBitmap(String imageData, String imageDataType, BitmapFactory.Options options) throws IOException, URISyntaxException {
+            Bitmap bmp;
+            URI uri = new URI(imageData);
+            File imageFile = new File(uri);
+            bmp = BitmapFactory.decodeFile(imageFile.getAbsolutePath(), options);
+            return bmp;
+        }
+
+        protected void storeImage(JSONObject params, String format, Bitmap bmp, CallbackContext callbackContext) throws JSONException, IOException, URISyntaxException {
+            int quality = params.getInt("quality");
+            String filename = params.getString("filename");
+            URI folderUri = new URI(params.getString("directory"));
+            URI pictureUri = new URI(params.getString("directory") + "/" + filename);
+            File folder = new File(folderUri);
+            folder.mkdirs();
+            File file = new File(pictureUri);
+            OutputStream outStream = new FileOutputStream(file);
+            if (format.equals(FORMAT_PNG)) {
+                bmp.compress(Bitmap.CompressFormat.PNG, quality,
+                        outStream);
+            } else {
+                bmp.compress(Bitmap.CompressFormat.JPEG, quality,
+                        outStream);
+            }
+            outStream.flush();
+            outStream.close();
+            JSONObject res = new JSONObject();
+            res.put("filename", filename);
+            res.put("width", bmp.getWidth());
+            res.put("height", bmp.getHeight());
+            callbackContext.success(res);
+        }
+    }
+
+    private class GetImageSize extends ImageTools implements Runnable {
+        public GetImageSize(JSONObject params, CallbackContext callbackContext) throws JSONException {
+            super(params, callbackContext);
+        }
+
+        @Override
+        public void run() {
+            try {
+                BitmapFactory.Options options = new BitmapFactory.Options();
+                options.inJustDecodeBounds = true;
+                Bitmap bmp = getBitmap(imageData, imageDataType, options);
+                JSONObject res = new JSONObject();
+                res.put("width", options.outWidth);
+                res.put("height", options.outHeight);
+                callbackContext.success(res);
+            } catch (JSONException e) {
+                callbackContext.error(e.getMessage());
+            } catch (IOException e) {
+                Log.d("PLUGIN", e.getMessage());
+                callbackContext.error(e.getMessage());
+            } catch (URISyntaxException e) {
+                Log.d("PLUGIN", e.getMessage());
+                callbackContext.error(e.getMessage());
+            }
+        }
     }
 }
